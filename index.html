@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>個人營養與體重月曆 - 雲端完整版</title>
+    <style>
+        :root { 
+            --primary-color: #a64d4d; 
+            --bg-color: #fdf5f5; 
+            --border-color: #e2b4b4; 
+            --accent-color: #bc7a7a; 
+            --edit-color: #2c5e8a; 
+            --manage-bg: #f0f7ff; 
+            --manage-primary: #3a7ebf; 
+            --manage-border: #bcd4e6;
+            --success-color: #2e7d32;
+            --danger-color: #c62828;
+            --weight-color: #5c6bc0;
+        }
+        body { background-color: var(--bg-color); font-family: "Microsoft JhengHei", sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        
+        /* 登入畫面覆蓋層 */
+        #authOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(253, 245, 245, 0.95); display: flex; justify-content: center; align-items: center; z-index: 1000; flex-direction: column; }
+        .auth-box { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 90%; max-width: 350px; text-align: center; border: 2px solid var(--border-color); }
+        .auth-box input { margin-bottom: 15px; }
+        .auth-box button { margin-bottom: 10px; }
+
+        /* 左側月曆 */
+        .calendar-section { flex: 2; padding: 20px; display: flex; flex-direction: column; }
+        .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; color: var(--primary-color); }
+        .manage-toggle-btn { background: var(--manage-primary); color: white; border: none; padding: 10px 20px; border-radius: 25px; font-size: 14px; cursor: pointer; font-weight: bold; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: 0.3s; }
+        
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; flex-grow: 1; background: white; border-radius: 15px; padding: 15px; border: 2px solid var(--border-color); }
+        .weekday { text-align: center; font-weight: bold; color: var(--accent-color); padding: 5px 0; border-bottom: 1px solid #eee; }
+        .day-cell { border: 1px solid #f9f0f0; border-radius: 10px; padding: 8px; min-height: 85px; display: flex; flex-direction: column; position: relative; background: #fff; cursor: pointer; }
+        .day-cell.today { border: 2px solid var(--primary-color); background: #fffafb; }
+        .day-cell.editing-target { border: 2px dashed var(--edit-color); background: #f0f7ff; }
+        .date-num { font-size: 14px; font-weight: bold; color: #888; }
+        
+        .day-data { font-size: 11px; line-height: 1.4; margin-top: 5px; flex-grow: 1; }
+        .day-data .cal { color: #d32f2f; font-weight: bold; }
+        .day-data .pro { color: #388e3c; font-weight: bold; }
+        .day-data .weight { color: var(--weight-color); font-weight: bold; margin-top: 2px; }
+        
+        .cell-btns { display: flex; gap: 4px; margin-top: auto; opacity: 0.1; transition: 0.3s; }
+        .day-cell:hover .cell-btns { opacity: 1; }
+        .mini-btn { flex: 1; font-size: 10px; padding: 2px 0; border-radius: 4px; border: none; color: white; cursor: pointer; }
+
+        /* 右側輸入欄 */
+        .input-section { flex: 1; background: white; border-left: 2px solid var(--border-color); padding: 25px; display: flex; flex-direction: column; box-shadow: -5px 0 15px rgba(0,0,0,0.03); overflow-y: auto; transition: 0.3s; }
+        .input-section.manage-mode { background-color: var(--manage-bg); border-left-color: var(--manage-border); }
+
+        .status-tag { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: bold; margin-bottom: 10px; }
+        .tag-today { background: #ffebeb; color: var(--primary-color); }
+        .tag-edit { background: #e3f2fd; color: var(--edit-color); }
+        .tag-manage { background: #dbeafe; color: var(--manage-primary); }
+
+        h2 { margin: 0 0 15px 0; font-size: 20px; color: var(--primary-color); }
+
+        .input-group { margin-bottom: 12px; }
+        label { display: block; color: #8e6d6d; font-size: 13px; margin-bottom: 5px; font-weight: bold; }
+        select, input { width: 100%; padding: 10px; border: 1.5px solid #ebdada; border-radius: 8px; box-sizing: border-box; font-size: 14px; background: white; }
+        .row { display: flex; gap: 10px; margin-bottom: 10px; }
+        button { width: 100%; padding: 12px; border-radius: 10px; border: none; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        .add-btn { background-color: var(--primary-color); color: white; margin-bottom: 8px; }
+        .save-menu-btn { background-color: var(--manage-primary); color: white; }
+        
+        /* 目標與體重顯示區 */
+        .target-box { background: #fdf8f8; padding: 12px; border-radius: 10px; margin-bottom: 15px; border: 1px solid var(--border-color); }
+        .target-box button { padding: 8px; font-size: 12px; margin-top: 5px; background: var(--accent-color); color: white; }
+        
+        .weight-box { background: #f0f4f8; padding: 12px; border-radius: 10px; margin-bottom: 15px; border: 1px solid #c5d0e6; }
+        
+        .total-display { background: #fffafa; padding: 15px; border-radius: 10px; margin-top: 15px; text-align: center; border: 1px dashed var(--border-color); }
+        .stat-row { display: flex; justify-content: space-around; margin-top: 10px; }
+        .stat-col { display: flex; flex-direction: column; align-items: center; }
+        .stat-val { font-size: 20px; font-weight: bold; color: var(--primary-color); }
+        .stat-rem { font-size: 12px; font-weight: bold; margin-top: 3px; }
+
+        .settle-btn { background-color: var(--accent-color); color: white; margin-top: 10px; }
+        
+        /* 清單列表樣式 */
+        .menu-list-container { margin-top: 15px; border-top: 1px solid #d1e3f3; padding-top: 15px; }
+        .menu-group-title { font-size: 13px; color: var(--manage-primary); font-weight: bold; background: #e1efff; padding: 5px 12px; border-radius: 5px; margin-top: 10px; }
+        .menu-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border-bottom: 1px solid #e1efff; font-size: 13px; background: white; margin: 2px 0; border-radius: 4px; }
+        
+        /* 今日明細樣式 */
+        .log-item { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px dashed #eee; font-size: 13px; }
+
+        /* 手機版響應式 */
+        @media (max-width: 900px) { 
+            body { flex-direction: column; overflow-y: auto; height: auto; } 
+            .input-section { order: 1; flex: none; width: 100%; box-sizing: border-box; border-left: none; border-bottom: 2px solid var(--border-color); overflow-y: visible; }
+            .calendar-section { order: 2; flex: none; height: auto; width: 100%; box-sizing: border-box; padding-bottom: 40px; } 
+            .calendar-grid { padding: 10px; gap: 4px; }
+            .day-cell { padding: 4px; min-height: 75px; }
+            .cell-btns { opacity: 1; flex-direction: column; gap: 2px; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="authOverlay">
+    <div class="auth-box">
+        <h2 style="color: var(--primary-color);">🍎 雲端營養月曆</h2>
+        <input type="email" id="authEmail" placeholder="電子郵件">
+        <input type="password" id="authPassword" placeholder="密碼 (至少6碼)">
+        <button style="background: var(--primary-color); color: white;" onclick="handleLogin()">登入</button>
+        <button style="background: white; color: var(--primary-color); border: 2px solid var(--primary-color);" onclick="handleRegister()">註冊新帳號</button>
+        <div id="authMsg" style="color: red; font-size: 12px; margin-top: 10px;"></div>
+    </div>
+</div>
+
+<div class="calendar-section">
+    <button class="manage-toggle-btn" onclick="toggleMode('manage')">🍴 管理自訂菜單</button>
+    
+    <div class="calendar-header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <button onclick="changeMonth(-1)" style="padding: 5px 15px; width: auto; background: var(--manage-bg); color: var(--edit-color); border: 1px solid var(--manage-border);">◀</button>
+            <h3 id="monthTitle" style="margin: 0; min-width: 110px; text-align: center;">月曆</h3>
+            <button onclick="changeMonth(1)" style="padding: 5px 15px; width: auto; background: var(--manage-bg); color: var(--edit-color); border: 1px solid var(--manage-border);">▶</button>
+        </div>
+        <div>
+            <span id="userEmailDisplay" style="font-size: 12px; margin-right: 10px; color: #666;"></span>
+            <button onclick="handleLogout()" style="width: auto; padding: 5px 10px; font-size: 12px; background: #888; color: white;">登出</button>
+        </div>
+    </div>
+    
+    <div class="calendar-grid" id="calendarGrid"></div>
+</div>
+
+<div class="input-section" id="rightPanel">
+    <div id="recordUI">
+        <div class="header-row" style="display:flex; justify-content:space-between;">
+            <div id="statusTag" class="status-tag tag-today">今日紀錄</div>
+            <button id="cancelEditBtn" style="display:none; border:none; background:none; color:#999; cursor:pointer;" onclick="switchToDate(todayDateStr)">✖ 取消補登</button>
+        </div>
+        
+        <div class="target-box">
+            <div class="row" style="margin-bottom:0;">
+                <div><label>🎯 TDEE 目標</label><input type="number" id="setTDEE" placeholder="例: 2000"></div>
+                <div><label>💪 蛋白質目標</label><input type="number" id="setPro" placeholder="例: 120"></div>
+            </div>
+            <button onclick="saveTargets()">💾 更新個人目標</button>
+        </div>
+
+        <div class="weight-box">
+            <div class="row" style="margin-bottom:0; align-items: center;">
+                <div style="flex:1;">
+                    <label style="color:var(--weight-color)">⚖️ 紀錄體重 (kg)</label>
+                    <input type="number" id="dailyWeight" step="0.1" placeholder="例: 65.5">
+                </div>
+                <div style="width: 80px;">
+                    <button onclick="saveWeight()" style="background:var(--weight-color); color:white; margin-top: 20px; padding: 10px;">儲存</button>
+                </div>
+            </div>
+        </div>
+
+        <h2 id="inputTitle">🍎 新增飲食紀錄</h2>
+        <div class="input-group">
+            <label>快速選擇菜單</label>
+            <div class="row">
+                <select id="categorySelect" onchange="updateFoodSubSelect()"></select>
+                <select id="foodSubSelect" onchange="autoFillFromSub()"></select>
+            </div>
+        </div>
+        
+        <div class="input-group">
+            <label>食物名稱 (可手動輸入)</label>
+            <input type="text" id="recName" placeholder="例如：拿鐵">
+        </div>
+        <div class="row">
+            <div><label>熱量 (kcal)</label><input type="number" id="recCal" placeholder="0"></div>
+            <div><label>蛋白質 (g)</label><input type="number" id="recPro" placeholder="0"></div>
+        </div>
+        
+        <button class="add-btn" id="addBtnRec" onclick="addEntryToLog()">加入今日累計 ＋</button>
+        
+        <div class="total-display">
+            <div style="font-size: 14px; color: #666;">當前累計總合</div>
+            <div class="stat-row">
+                <div class="stat-col">
+                    <span class="stat-val" id="curCal">0 <small>kcal</small></span>
+                    <span class="stat-rem" id="remCal"></span>
+                </div>
+                <div class="stat-col">
+                    <span class="stat-val" id="curPro">0 <small>g</small></span>
+                    <span class="stat-rem" id="remPro"></span>
+                </div>
+            </div>
+        </div>
+        
+        <button class="settle-btn" onclick="settleToCalendar()">同步至月曆 💾</button>
+        <div id="todayFoodList" style="margin-top:15px; font-size:12px; color:#666; border-top:1px solid #eee; padding-top:10px;"></div>
+    </div>
+
+    <div id="manageUI" style="display:none;">
+        <div class="status-tag tag-manage">菜單管理模式</div>
+        <h2>🍴 建立食物清單</h2>
+        <div class="input-group">
+            <label>1. 群組名稱</label>
+            <input type="text" id="mGroup" list="mGroups" placeholder="例如：早餐">
+            <datalist id="mGroups"></datalist>
+        </div>
+        <div class="input-group">
+            <label>2. 食物名稱</label>
+            <input type="text" id="mName" placeholder="例如：三明治">
+        </div>
+        <div class="row">
+            <div><label>熱量</label><input type="number" id="mCal" placeholder="0"></div>
+            <div><label>蛋白質</label><input type="number" id="mPro" placeholder="0"></div>
+        </div>
+        <button class="save-menu-btn" onclick="saveToMenu()">儲存到清單 ＋</button>
+        <button style="margin-top:10px; background:#e2e8f0; color:#475569;" onclick="toggleMode('record')">← 返回紀錄模式</button>
+        <div class="menu-list-container" id="menuListView"></div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-auth.js";
+    import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-firestore.js";
+
+    // ⚠️ 貼上你從 Firebase Console 取得的金鑰設定 ⚠️
+    const firebaseConfig = {
+        apiKey: "AIzaSyA5bjn998Uv2WAqG8hrVxC3ttuBYQMgnlU",
+        authDomain: "get-fit-8b5f5.firebaseapp.com",
+        projectId: "get-fit-8b5f5",
+        storageBucket: "get-fit-8b5f5.firebasestorage.app",
+        messagingSenderId: "683811288810",
+        appId: "1:683811288810:web:d807bcbd49add92c6fc993"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    // 全域變數
+    let currentUserUID = null;
+    let myTargets = { tdee: 0, pro: 0 };
+    let allDailyData = {};
+    let monthData = {};
+    let customMenu = {}; 
+    
+    // 時間變數 (解鎖 currentYear 與 currentMonth 讓切換月份生效)
+    const now = new Date();
+    let currentYear = now.getFullYear();
+    let currentMonth = now.getMonth();
+    const todayDateStr = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+    let editingDate = todayDateStr;
+
+    // --- Firebase 登入與資料庫邏輯 ---
+    onAuthStateChanged(auth, async (user) => {
+        if (user) {
+            currentUserUID = user.uid;
+            document.getElementById('authOverlay').style.display = 'none';
+            document.getElementById('userEmailDisplay').innerText = user.email;
+            await loadUserDataFromDB();
+            initAppUI();
+        } else {
+            currentUserUID = null;
+            document.getElementById('authOverlay').style.display = 'flex';
+        }
+    });
+
+    window.handleLogin = async () => {
+        const e = document.getElementById('authEmail').value;
+        const p = document.getElementById('authPassword').value;
+        try { await signInWithEmailAndPassword(auth, e, p); } 
+        catch (error) { document.getElementById('authMsg').innerText = "登入失敗：" + error.message; }
+    };
+
+    window.handleRegister = async () => {
+        const e = document.getElementById('authEmail').value;
+        const p = document.getElementById('authPassword').value;
+        try { await createUserWithEmailAndPassword(auth, e, p); } 
+        catch (error) { document.getElementById('authMsg').innerText = "註冊失敗：" + error.message; }
+    };
+
+    window.handleLogout = () => signOut(auth);
+
+    // 讀取與儲存雲端資料
+    async function loadUserDataFromDB() {
+        if (!currentUserUID) return;
+        const docSnap = await getDoc(doc(db, "users", currentUserUID));
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            myTargets = data.targets || { tdee: 0, pro: 0 };
+            allDailyData = data.allDailyData || {};
+            monthData = data.monthData || {};
+            customMenu = data.customMenu || {};
+        } else {
+            myTargets = { tdee: 0, pro: 0 }; allDailyData = {}; monthData = {}; customMenu = {};
+        }
+        document.getElementById('setTDEE').value = myTargets.tdee || '';
+        document.getElementById('setPro').value = myTargets.pro || '';
+    }
+
+    async function syncToDB() {
+        if (!currentUserUID) return;
+        await setDoc(doc(db, "users", currentUserUID), {
+            targets: myTargets,
+            allDailyData: allDailyData,
+            monthData: monthData,
+            customMenu: customMenu
+        });
+    }
+
+    // --- 應用程式 UI 邏輯 ---
+    function initAppUI() {
+        document.getElementById('monthTitle').innerText = `${currentYear}年 ${currentMonth + 1}月`;
+        renderCalendar();
+        updateSelectors();
+        window.switchToDate(todayDateStr);
+    }
+
+    // 切換月份功能
+    window.changeMonth = (offset) => {
+        currentMonth += offset;
+        if (currentMonth < 0) { currentMonth = 11; currentYear--; } 
+        else if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+        document.getElementById('monthTitle').innerText = `${currentYear}年 ${currentMonth + 1}月`;
+        renderCalendar();
+    };
+
+    window.saveTargets = async () => {
+        myTargets.tdee = parseFloat(document.getElementById('setTDEE').value) || 0;
+        myTargets.pro = parseFloat(document.getElementById('setPro').value) || 0;
+        await syncToDB();
+        alert("目標已儲存！");
+        window.switchToDate(editingDate);
+    };
+
+    // 儲存體重功能
+    window.saveWeight = async () => {
+        const w = parseFloat(document.getElementById('dailyWeight').value) || 0;
+        if (w === 0) return alert("請輸入有效的體重數字！");
+
+        if (!allDailyData[editingDate]) allDailyData[editingDate] = { cal: 0, pro: 0, list: [], weight: 0 };
+        allDailyData[editingDate].weight = w;
+        
+        if (!monthData[editingDate]) monthData[editingDate] = { cal: 0, pro: 0, weight: 0 };
+        monthData[editingDate].weight = w;
+        
+        await syncToDB();
+        
+        const btn = document.querySelector('.weight-box button');
+        const originText = btn.innerText;
+        btn.innerText = "✅ 已儲存";
+        btn.style.backgroundColor = "#4caf50";
+        setTimeout(() => { btn.innerText = originText; btn.style.backgroundColor = "var(--weight-color)"; }, 1500);
+
+        renderCalendar();
+    };
+
+    window.toggleMode = (mode) => {
+        const panel = document.getElementById('rightPanel');
+        if (mode === 'manage') {
+            panel.classList.add('manage-mode');
+            document.getElementById('recordUI').style.display = 'none';
+            document.getElementById('manageUI').style.display = 'block';
+            renderManageList();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+            panel.classList.remove('manage-mode');
+            document.getElementById('recordUI').style.display = 'block';
+            document.getElementById('manageUI').style.display = 'none';
+            updateSelectors();
+        }
+    };
+
+    window.saveToMenu = async () => {
+        const g = document.getElementById('mGroup').value.trim();
+        const n = document.getElementById('mName').value.trim();
+        const c = parseFloat(document.getElementById('mCal').value) || 0;
+        const p = parseFloat(document.getElementById('mPro').value) || 0;
+        if (!g || !n) return;
+        if (!customMenu[g]) customMenu[g] = [];
+        customMenu[g].push({ name: n, cal: c, pro: p });
+        await syncToDB();
+        renderManageList();
+        ['mName', 'mCal', 'mPro'].forEach(id => document.getElementById(id).value = '');
+    };
+
+    function renderManageList() {
+        const view = document.getElementById('menuListView');
+        const dl = document.getElementById('mGroups');
+        view.innerHTML = ''; dl.innerHTML = '';
+        for (let group in customMenu) {
+            const opt = document.createElement('option'); opt.value = group; dl.appendChild(opt);
+            const groupDiv = document.createElement('div');
+            groupDiv.innerHTML = `<div class="menu-group-title">${group}</div>`;
+            customMenu[group].forEach((item, index) => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'menu-item';
+                itemDiv.innerHTML = `<span>${item.name} <small>(🔥${item.cal}/💪${item.pro}g)</small></span>
+                    <span style="color:#ff8a8a; cursor:pointer;" onclick="deleteMenuItem('${group}', ${index})">🗑️</span>`;
+                groupDiv.appendChild(itemDiv);
+            });
+            view.appendChild(groupDiv);
+        }
+    }
+
+    window.deleteMenuItem = async (group, index) => {
+        if (confirm(`刪除「${customMenu[group][index].name}」？`)) {
+            customMenu[group].splice(index, 1);
+            if (customMenu[group].length === 0) delete customMenu[group];
+            await syncToDB();
+            renderManageList();
+            updateSelectors();
+        }
+    };
+
+    function updateSelectors() {
+        const catS = document.getElementById('categorySelect');
+        catS.innerHTML = '<option value="">--請選擇群組--</option>';
+        for (let g in customMenu) {
+            const opt = document.createElement('option'); opt.value = g; opt.innerText = g; catS.appendChild(opt);
+        }
+        window.updateFoodSubSelect();
+    }
+
+    window.updateFoodSubSelect = () => {
+        const cat = document.getElementById('categorySelect').value;
+        const subS = document.getElementById('foodSubSelect');
+        subS.innerHTML = '<option value="">--請選擇食物--</option>';
+        if (customMenu[cat]) {
+            customMenu[cat].forEach((item, idx) => {
+                const opt = document.createElement('option');
+                opt.value = idx; opt.innerText = item.name; subS.appendChild(opt);
+            });
+        }
+    };
+
+    window.autoFillFromSub = () => {
+        const cat = document.getElementById('categorySelect').value;
+        const idx = document.getElementById('foodSubSelect').value;
+        if (customMenu[cat] && customMenu[cat][idx]) {
+            document.getElementById('recName').value = customMenu[cat][idx].name;
+            document.getElementById('recCal').value = customMenu[cat][idx].cal;
+            document.getElementById('recPro').value = customMenu[cat][idx].pro;
+        }
+    };
+
+    window.addEntryToLog = async () => {
+        const nameVal = document.getElementById('recName').value.trim();
+        const calVal = parseFloat(document.getElementById('recCal').value) || 0;
+        const proVal = parseFloat(document.getElementById('recPro').value) || 0;
+        if (!nameVal) { alert("請輸入食物名稱！"); return; }
+
+        if (!allDailyData[editingDate]) allDailyData[editingDate] = { cal: 0, pro: 0, list: [], weight: 0 };
+        allDailyData[editingDate].cal += calVal;
+        allDailyData[editingDate].pro += proVal;
+        allDailyData[editingDate].list.push({ name: nameVal, cal: calVal, pro: proVal });
+        
+        await syncToDB();
+
+        document.getElementById('recName').value = '';
+        document.getElementById('recCal').value = '';
+        document.getElementById('recPro').value = '';
+        document.getElementById('categorySelect').value = '';
+        window.updateFoodSubSelect();
+
+        window.switchToDate(editingDate);
+    };
+
+    window.removeEntryFromLog = async (index) => {
+        const data = allDailyData[editingDate];
+        if (!data || !data.list[index]) return;
+        data.cal -= data.list[index].cal;
+        data.pro -= data.list[index].pro;
+        data.list.splice(index, 1);
+        await syncToDB();
+        window.switchToDate(editingDate);
+    };
+
+    window.switchToDate = (dateStr) => {
+        editingDate = dateStr;
+        const isToday = (dateStr === todayDateStr);
+        window.toggleMode('record');
+        document.getElementById('statusTag').className = isToday ? "status-tag tag-today" : "status-tag tag-edit";
+        document.getElementById('statusTag').innerText = isToday ? "今日紀錄" : `補登：${dateStr.split('-')[2]}日`;
+        document.getElementById('cancelEditBtn').style.display = isToday ? "none" : "block";
+        
+        const data = allDailyData[dateStr] || { cal: 0, pro: 0, list: [], weight: 0 };
+        
+        // 更新當前數值與體重
+        document.getElementById('curCal').innerText = `${Math.round(data.cal)} kcal`;
+        document.getElementById('curPro').innerText = `${data.pro.toFixed(1)} g`;
+        document.getElementById('dailyWeight').value = data.weight || '';
+        
+        // 計算與更新目標剩餘
+        if(myTargets.tdee > 0) {
+            let remC = myTargets.tdee - data.cal;
+            let remCElem = document.getElementById('remCal');
+            remCElem.innerText = `剩餘: ${Math.round(remC)} kcal`;
+            remCElem.style.color = remC < 0 ? "var(--danger-color)" : "var(--success-color)";
+        } else {
+            document.getElementById('remCal').innerText = "未設定目標";
+            document.getElementById('remCal').style.color = "#999";
+        }
+
+        if(myTargets.pro > 0) {
+            let remP = myTargets.pro - data.pro;
+            let remPElem = document.getElementById('remPro');
+            remPElem.innerText = `剩餘: ${remP.toFixed(1)} g`;
+            remPElem.style.color = remP < 0 ? "var(--success-color)" : "#e68a00";
+        } else {
+            document.getElementById('remPro').innerText = "未設定目標";
+            document.getElementById('remPro').style.color = "#999";
+        }
+        
+        const listDiv = document.getElementById('todayFoodList');
+        listDiv.innerHTML = data.list && data.list.length ? '<b>今日已選：</b>' : '';
+        if(data.list) {
+            data.list.forEach((i, idx) => {
+                listDiv.innerHTML += `
+                    <div class="log-item">
+                        <span>· ${i.name} (${i.cal}kcal / ${i.pro}g)</span>
+                        <span style="color:#ff8a8a; cursor:pointer;" onclick="removeEntryFromLog(${idx})">✖</span>
+                    </div>`;
+            });
+        }
+        renderCalendar();
+        if (window.innerWidth <= 900) window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    window.settleToCalendar = async () => {
+        const data = allDailyData[editingDate] || { cal:0, pro:0, weight:0 };
+        monthData[editingDate] = { 
+            cal: Math.round(data.cal), 
+            pro: parseFloat(data.pro.toFixed(1)),
+            weight: data.weight || 0
+        };
+        await syncToDB();
+        
+        const btn = document.querySelector('.settle-btn');
+        const originText = btn.innerText;
+        btn.innerText = "✅ 同步成功！";
+        btn.style.backgroundColor = "#4caf50";
+        setTimeout(() => { btn.innerText = originText; btn.style.backgroundColor = "var(--accent-color)"; }, 1500);
+
+        if (editingDate !== todayDateStr) window.switchToDate(todayDateStr);
+        else renderCalendar();
+    };
+
+    function renderCalendar() {
+        const grid = document.getElementById('calendarGrid');
+        const headers = `<div class="weekday">日</div><div class="weekday">一</div><div class="weekday">二</div><div class="weekday">三</div><div class="weekday">四</div><div class="weekday">五</div><div class="weekday">六</div>`;
+        grid.innerHTML = headers;
+        const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+        const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+        for (let i = 0; i < firstDay; i++) grid.appendChild(document.createElement('div'));
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dateStr = `${currentYear}-${currentMonth}-${d}`;
+            const cell = document.createElement('div');
+            cell.className = `day-cell ${dateStr === todayDateStr ? 'today' : ''} ${dateStr === editingDate ? 'editing-target' : ''}`;
+            const data = monthData[dateStr]; 
+            
+            // 如果有體重資料，就顯示出來
+            let weightHtml = data && data.weight ? `<div class="weight">⚖️${data.weight}kg</div>` : '';
+            
+            cell.innerHTML = `
+                <div class="date-num">${d}</div>
+                <div class="day-data">
+                    ${data && data.cal ? `<div class="cal">🔥${data.cal}</div><div class="pro">💪${data.pro}g</div>` : ''}
+                    ${weightHtml}
+                </div>
+                <div class="cell-btns">
+                    <button class="mini-btn" style="background:#2c5e8a" onclick="switchToDate('${dateStr}')">📝</button>
+                    <button class="mini-btn" style="background:#cc9999" onclick="deleteDayRecord('${dateStr}', event)">🗑️</button>
+                </div>`;
+            grid.appendChild(cell);
+        }
+    }
+
+    window.deleteDayRecord = async (dateStr, e) => {
+        e.stopPropagation();
+        if (confirm(`刪除 ${dateStr.split('-')[2]} 日所有紀錄？`)) {
+            delete allDailyData[dateStr]; delete monthData[dateStr];
+            await syncToDB();
+            window.switchToDate(editingDate);
+        }
+    };
+</script>
+</body>
+</html>
